@@ -1,9 +1,15 @@
 import 'dotenv/config';
+import { lookup } from "mime-types";
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+process.env.NTBA_FIX_350 = true;
 import TelegramBot from "node-telegram-bot-api";
 import { existsSync, mkdirSync, readdirSync, renameSync } from "fs";
 
+
 const token = process.env.TOKEN;
-const downloadsFolder = "./downloads";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const downloadsFolder = join(__dirname, "downloads");
 
 if (!existsSync(downloadsFolder)) {
     mkdirSync(downloadsFolder);
@@ -23,7 +29,7 @@ bot.onText(/\/upload/, (msg) => {
     bot.sendMessage(chatId, "Enter first folder name:").then(() => {
         bot.once("message", (msg) => {
             const firstFolderName = msg.text;
-            folderPath += `/${firstFolderName}`;
+            folderPath = join(folderPath, firstFolderName);
 
             if (!existsSync(folderPath)) {
                 mkdirSync(folderPath, { recursive: true });
@@ -32,7 +38,7 @@ bot.onText(/\/upload/, (msg) => {
             bot.sendMessage(chatId, "Enter second folder name:").then(() => {
                 bot.once("message", (msg) => {
                     const secondFolderName = msg.text;
-                    folderPath += `/${secondFolderName}`;
+                    folderPath = join(folderPath, secondFolderName);
 
                     if (!existsSync(folderPath)) {
                         mkdirSync(folderPath, { recursive: true });
@@ -43,9 +49,9 @@ bot.onText(/\/upload/, (msg) => {
                             const fileName = msg.document.file_name;
                             bot.downloadFile(msg.document.file_id, folderPath).then((savedFile) => {
                                 bot.sendMessage(chatId, `File ${fileName} uploaded successfully!`);
-                                const uploadedFilePath = `${folderPath}/${fileName}`;
+                                const uploadedFilePath = join(folderPath, fileName);
                                 // Rename the file
-                                renameSync(`.\\${savedFile}`, uploadedFilePath);
+                                renameSync(join(savedFile), uploadedFilePath);
                             }).catch((error) => {
                                 console.error("Error downloading file:", error);
                                 bot.sendMessage(chatId, "An error occurred while downloading the file.");
@@ -84,7 +90,7 @@ bot.onText(/\/file/, (msg) => {
             });
 
             const mainFolderName = mainFolderCallbackQuery.data.split('_')[1];
-            const mainFolderPath = `${downloadsFolder}/${mainFolderName}`;
+            const mainFolderPath = join(downloadsFolder, mainFolderName);
 
             if (!existsSync(mainFolderPath)) {
                 bot.sendMessage(chatId, `Main folder ${mainFolderName} does not exist!`);
@@ -115,7 +121,7 @@ bot.onText(/\/file/, (msg) => {
                     });
 
                     const subFolderName = subFolderCallbackQuery.data.split('_')[1];
-                    const subFolderPath = `${mainFolderPath}/${subFolderName}`;
+                    const subFolderPath = join(mainFolderPath, subFolderName);
 
                     const fileButtons = readdirSync(subFolderPath).map(fileName => {
                         return [{ text: fileName, callback_data: `file_${fileName}` }];
@@ -141,9 +147,21 @@ bot.onText(/\/file/, (msg) => {
                             const fileName = (fileCallbackQuery.message.reply_markup.inline_keyboard.find(buttonsFilter =>
                                 buttonsFilter[0].callback_data === fileCallbackQuery.data
                             ))[0].text;
-                            const filePath = `${subFolderPath}/${fileName}`;
 
-                            bot.sendDocument(chatId, filePath).then(() => {
+                            const filePath = join(subFolderPath, fileName);
+
+                            const contentType = lookup(filePath); // returns 'audio/mpeg' for .mp3 files                            
+
+                            const fileOptions = {
+                                // Explicitly specify the file name.
+                                filename: fileName,
+                                // Explicitly specify the MIME type.
+                                contentType
+                            };
+
+                            console.log(fileOptions);
+
+                            bot.sendDocument(chatId, filePath, {}, fileOptions).then(() => {
                                 bot.sendMessage(chatId, "File sent successfully!");
                             }).catch((err) => {
                                 console.error(err);
